@@ -14,6 +14,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.Player;
 
 import java.io.File;
 import java.util.*;
@@ -62,6 +63,7 @@ public class LeaderboardManager {
                 jobSection.getKeys(false).forEach(uuidString -> {
                     try {
                         UUID uuid = UUID.fromString(uuidString);
+                        if (isBlacklisted(uuid)) return;
                         int position = jobSection.getInt(uuidString + ".position", -1);
                         int level = jobSection.getInt(uuidString + ".level", -1);
 
@@ -108,6 +110,7 @@ public class LeaderboardManager {
             }
 
             leaderboardPlayerCache.forEach(((uuid, playerLeaderboardData) -> {
+                if (isBlacklisted(uuid)) return;
                 playerLeaderboardData.getLeaderboardStats().forEach((job, stats) -> {
                     String path = "leaderboard." + job.getId() + "." + uuid.toString();
                     leaderboardConfig.set(path + ".position", stats.getPosition());
@@ -150,7 +153,7 @@ public class LeaderboardManager {
             UUID[] leaderboard = new UUID[top];
 
             List<PlayerJobData> players = new ArrayList<>(plugin.getStorage().getAllCachedData());
-            players.removeIf(p -> p.getJobStats(job.getId()).getLevel() <= 0);
+            players.removeIf(p -> isBlacklisted(p.getUuid()) || p.getJobStats(job.getId()).getLevel() <= 0);
             players.sort((p1, p2) -> Integer.compare(p2.getJobStats(job.getId()).getLevel(), p1.getJobStats(job.getId()).getLevel()));
 
             for (int i = 0; i < players.size() && i < top; i++) {
@@ -166,6 +169,7 @@ public class LeaderboardManager {
 
     public int getPosition(UUID uuid, Job job) {
         synchronized (leaderboardLock) {
+            if (isBlacklisted(uuid)) return -1;
             PlayerLeaderboardData data = leaderboardPlayerCache.get(uuid);
             if (data == null) return -1;
             PlayerLeaderboardData.LeaderboardStats stats = data.getLeaderboardStats().get(job);
@@ -176,6 +180,7 @@ public class LeaderboardManager {
 
     public int getLevel(UUID uuid, Job job) {
         synchronized (leaderboardLock) {
+            if (isBlacklisted(uuid)) return -1;
             PlayerLeaderboardData data = leaderboardPlayerCache.get(uuid);
             if (data == null) return -1;
             PlayerLeaderboardData.LeaderboardStats stats = data.getLeaderboardStats().get(job);
@@ -186,6 +191,7 @@ public class LeaderboardManager {
 
     public PlayerLeaderboardData.LeaderboardStats getStats(UUID uuid, Job job) {
         synchronized (leaderboardLock) {
+            if (isBlacklisted(uuid)) return null;
             PlayerLeaderboardData data = leaderboardPlayerCache.get(uuid);
             if (data == null) return null;
             return data.getLeaderboardStats().get(job);
@@ -196,8 +202,16 @@ public class LeaderboardManager {
         synchronized (leaderboardLock) {
             if (position < 0) return null;
             UUID[] leaderboard = leaderboardJobCache.get(job);
-            if (leaderboard == null || position >= leaderboard.length) return null;
-            return leaderboard[position];
+            if (leaderboard == null) return null;
+
+            int visiblePosition = 0;
+            for (UUID uuid : leaderboard) {
+                if (uuid != null && !isBlacklisted(uuid)) {
+                    if (visiblePosition == position) return uuid;
+                    visiblePosition++;
+                }
+            }
+            return null;
         }
     }
 
@@ -207,7 +221,14 @@ public class LeaderboardManager {
             if (leaderboard == null) {
                 return new UUID[0];
             }
-            return Arrays.copyOf(leaderboard, leaderboard.length);
+            UUID[] filtered = new UUID[leaderboard.length];
+            int index = 0;
+            for (UUID uuid : leaderboard) {
+                if (uuid != null && !isBlacklisted(uuid) && index < filtered.length) {
+                    filtered[index++] = uuid;
+                }
+            }
+            return filtered;
         }
     }
 
@@ -216,11 +237,13 @@ public class LeaderboardManager {
             if (uuid == null) {
                 return null;
             }
+            if (isBlacklisted(uuid)) return null;
             return leaderboardPlayerCache.get(uuid);
         }
     }
 
     public void checkLeaderboardChange(UUID uuid, Job job, int level) {
+        if (isBlacklisted(uuid)) return;
         synchronized (leaderboardLock) {
             UUID[] leaderboard = leaderboardJobCache.get(job);
             if (leaderboard == null) return;
@@ -438,6 +461,10 @@ public class LeaderboardManager {
                         List<ValidPlayerEntry> validEntries = new ArrayList<>();
 
                         for (UUID uuid : uuids) {
+                            if (isBlacklisted(uuid)) {
+                                modified = true;
+                                continue;
+                            }
                             String name = uuidToName.get(uuid);
                             if (name == null) {
                                 plugin.getLogger().warning("Leaderboard validation: Removed player with unknown name/never joined (UUID: " + uuid + ") from job: " + job.getId());
@@ -550,5 +577,11 @@ public class LeaderboardManager {
             this.uuid = uuid;
             this.level = level;
         }
+    }
+
+    private boolean isBlacklisted(UUID uuid) {
+        if (uuid == null) return false;
+        Player player = Bukkit.getPlayer(uuid);
+        return player != null && plugin.getConfigManager().isBlacklisted(player.getName());
     }
 }

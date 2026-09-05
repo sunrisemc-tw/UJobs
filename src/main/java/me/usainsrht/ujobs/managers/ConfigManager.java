@@ -9,7 +9,11 @@ import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
 import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 @Getter
 public class ConfigManager {
@@ -18,6 +22,7 @@ public class ConfigManager {
     private YamlConfiguration jobsConfig;
     private YamlConfiguration leaderboardConfig;
     private Map<String, YamlMessage> messages;
+    private volatile List<Pattern> blacklistPatterns = List.of();
     public static final YamlMessage EMPTY_YAML_MESSAGE = new YamlMessage(null);
 
     public ConfigManager(UJobsPlugin plugin) {
@@ -36,6 +41,7 @@ public class ConfigManager {
         // Load config.yml
         plugin.saveDefaultConfig();
 
+        loadBlacklistPatterns();
         loadMessages();
 
         // Load jobs.yml
@@ -55,6 +61,23 @@ public class ConfigManager {
             }
         }
         leaderboardConfig = YamlConfiguration.loadConfiguration(leaderBoardFile);
+    }
+
+    private void loadBlacklistPatterns() {
+        List<Pattern> compiledPatterns = new ArrayList<>();
+        for (String regex : plugin.getConfig().getStringList("blacklist.regex")) {
+            try {
+                compiledPatterns.add(Pattern.compile(regex, Pattern.CASE_INSENSITIVE));
+            } catch (PatternSyntaxException e) {
+                plugin.getLogger().warning("Invalid blacklist regex '" + regex + "': " + e.getMessage());
+            }
+        }
+        blacklistPatterns = List.copyOf(compiledPatterns);
+    }
+
+    public boolean isBlacklisted(String playerName) {
+        if (playerName == null) return false;
+        return blacklistPatterns.stream().anyMatch(pattern -> pattern.matcher(playerName).matches());
     }
 
     public void loadMessages() {

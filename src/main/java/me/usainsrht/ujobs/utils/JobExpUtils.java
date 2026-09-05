@@ -22,6 +22,7 @@ public class JobExpUtils {
         if (plugin == null || player == null || job == null || reward == null || amount <= 0) {
             return;
         }
+        if (plugin.getConfigManager().isBlacklisted(player.getName())) return;
 
         PlayerJobData playerData = plugin.getStorage().getCached(player.getUniqueId());
         if (playerData == null) {

@@ -1,6 +1,11 @@
 # job bossbars when you gain xp in a job.
 progress_bossbars: true
 
+# 玩家名稱符合任一 regex（全字串匹配）時，不參與職業系統
+blacklist:
+  regex:
+    - "^bot_.*"
+
 # data storage backend
 storage:
   # supported values: pdc, sqlite, mysql, postgresql

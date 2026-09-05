@@ -19,6 +19,8 @@ public class JoinListener implements Listener {
     @EventHandler
     public void onJoin(PlayerJoinEvent e) {
         Player player = e.getPlayer();
+        // Blacklisted players do not load or persist job data.
+        if (plugin.getConfigManager().isBlacklisted(player.getName())) return;
         UUID uuid = player.getUniqueId();
         plugin.getStorage().load(uuid);
     }
