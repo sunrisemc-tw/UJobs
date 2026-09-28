@@ -111,3 +111,6 @@ buildNumber.properties
 
 # Common working directory
 run/
+
+# build-only stub for the vanished com.songoda:ultimatetimber artifact
+ultimatetimber-*.jar

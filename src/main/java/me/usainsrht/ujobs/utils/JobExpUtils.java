@@ -99,7 +99,20 @@ public class JobExpUtils {
             for (String math : all) {
                 try {
                     double result = MathUtil.eval(math);
-                    parsedCmd = parsedCmd.replace(math, String.valueOf(result));
+                    // Emit whole numbers without a trailing ".0" so that plugins whose
+                    // command arguments are strictly integer-typed (e.g. PlayerPoints'
+                    // "points give <player> <amount>") accept the substituted value.
+                    // Previously String.valueOf(double) always produced "24.0", which
+                    // PlayerPoints rejected outright, silently dropping every reward.
+                    String replacement;
+                    if (!Double.isNaN(result) && !Double.isInfinite(result)
+                            && result == Math.rint(result)
+                            && Math.abs(result) <= 9.007199254740992E15D) {
+                        replacement = String.valueOf((long) result);
+                    } else {
+                        replacement = String.valueOf(result);
+                    }
+                    parsedCmd = parsedCmd.replace(math, replacement);
                 } catch (Exception e) {
                     // Ignore invalid math expressions
                 }
