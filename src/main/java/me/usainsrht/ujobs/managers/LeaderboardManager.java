@@ -581,7 +581,6 @@ public class LeaderboardManager {
 
     private boolean isBlacklisted(UUID uuid) {
         if (uuid == null) return false;
-        Player player = Bukkit.getPlayer(uuid);
-        return player != null && plugin.getConfigManager().isBlacklisted(player.getName());
+        return plugin.getConfigManager().isBlacklisted(uuid);
     }
 }

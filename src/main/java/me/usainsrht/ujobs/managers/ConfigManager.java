@@ -4,14 +4,18 @@ import lombok.Getter;
 import me.usainsrht.ujobs.UJobsPlugin;
 import me.usainsrht.ujobs.yaml.YamlMessage;
 import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.Player;
 
 import java.io.File;
 import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
@@ -23,6 +27,7 @@ public class ConfigManager {
     private YamlConfiguration leaderboardConfig;
     private Map<String, YamlMessage> messages;
     private volatile List<Pattern> blacklistPatterns = List.of();
+    private final Map<UUID, Boolean> blacklistUuidCache = new ConcurrentHashMap<>();
     public static final YamlMessage EMPTY_YAML_MESSAGE = new YamlMessage(null);
 
     public ConfigManager(UJobsPlugin plugin) {
@@ -73,11 +78,40 @@ public class ConfigManager {
             }
         }
         blacklistPatterns = List.copyOf(compiledPatterns);
+        blacklistUuidCache.clear();
     }
 
     public boolean isBlacklisted(String playerName) {
         if (playerName == null) return false;
         return blacklistPatterns.stream().anyMatch(pattern -> pattern.matcher(playerName).matches());
+    }
+
+    /**
+     * UUID-based blacklist check that also covers OFFLINE players.
+     * Resolves the name from the online player first, then from the server's
+     * offline player cache (usercache.json) — never performs a blocking web lookup.
+     * Results are memoised because leaderboard code calls this very often.
+     */
+    public boolean isBlacklisted(UUID uuid) {
+        if (uuid == null) return false;
+        Boolean cached = blacklistUuidCache.get(uuid);
+        if (cached != null) return cached;
+
+        String name = null;
+        Player online = Bukkit.getPlayer(uuid);
+        if (online != null) {
+            name = online.getName();
+        } else {
+            // Paper resolves this from the in-memory profile cache / usercache.json.
+            // No blocking web request is made for a UUID that has played before.
+            OfflinePlayer offline = Bukkit.getOfflinePlayer(uuid);
+            if (offline.hasPlayedBefore() || offline.isOnline()) name = offline.getName();
+        }
+        if (name == null) return false; // unknown name -> cannot decide, do not cache
+
+        boolean blacklisted = isBlacklisted(name);
+        blacklistUuidCache.put(uuid, blacklisted);
+        return blacklisted;
     }
 
     public void loadMessages() {
